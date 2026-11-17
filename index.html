@@ -6,20 +6,20 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Rep Counter</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;600&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Audiowide&family=Inter:wght@400;600&display=swap" media="print" onload="this.media='all'">
 <style>
 /* Layout: full-screen camera, giant rep number overlaid, controls docked at bottom. Single dark gym look. */
 :root{
-  --bg:#0d0f0c; --panel:#1a1d18; --fg:#f2f4ee; --muted:#9aa394;
-  --accent:#c8ff3d; --down:#ff7a45;
-  --display:"Archivo Black",Impact,system-ui,sans-serif;
+  --bg:#0B1526; --panel:#0F1B2D; --fg:#D6DCE4; --muted:#A9B4C2; --line:#1F3556; --ink:#0B1526;
+  --accent:#8EC1F2; --down:#3B82D6;
+  --display:Audiowide,"Arial Black",system-ui,sans-serif;
   --body:Inter,system-ui,-apple-system,sans-serif;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--body)}
 main{position:relative;height:100%;display:grid;grid-template-rows:1fr auto}
-.stage{position:relative;overflow:hidden;background:#000}
+.stage{position:relative;overflow:hidden;background:var(--ink)}
 video,canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
 video.mirror,canvas.mirror{transform:scaleX(-1)}
 .hud{position:absolute;top:max(12px,env(safe-area-inset-top));left:max(16px,env(safe-area-inset-left));right:max(16px,env(safe-area-inset-right));display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
@@ -29,24 +29,28 @@ video.mirror,canvas.mirror{transform:scaleX(-1)}
 .meta{text-align:right;font-size:13px;color:var(--muted);text-shadow:0 1px 4px #000}
 .meta b{display:block;font-family:var(--display);font-size:20px;color:var(--fg);letter-spacing:.04em;text-transform:uppercase}
 .phase{display:inline-block;margin-top:6px;padding:2px 10px;border-radius:99px;background:var(--panel);font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-size:11px}
-.phase.down{background:var(--down);color:#000}
+.phase.down{background:var(--down);color:#fff}
 .msg{position:absolute;inset:auto 16px 16px;text-align:center;color:var(--muted);font-size:14px;text-shadow:0 1px 4px #000}
 .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;padding-block:12px calc(12px + env(safe-area-inset-bottom));padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right));background:var(--panel)}
-.seg{display:flex;border:1px solid #333a2e;border-radius:10px;overflow:hidden}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .seg button{border:0;border-radius:0}
-button,label.btn{font:600 14px var(--body);padding:10px 14px;border-radius:10px;border:1px solid #333a2e;background:transparent;color:var(--fg);cursor:pointer}
-button[aria-pressed="true"]{background:var(--accent);color:#000}
-button.primary{background:var(--accent);color:#000;border-color:var(--accent)}
+button,label.btn{font:600 14px var(--body);padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--fg);cursor:pointer}
+button[aria-pressed="true"]{background:var(--accent);color:var(--ink)}
+button.primary{background:var(--accent);color:var(--ink);border-color:var(--accent)}
 button:focus-visible,label.btn:focus-within{outline:2px solid var(--accent);outline-offset:2px}
 input[type=file]{position:absolute;opacity:0;width:1px;height:1px}
 @media (prefers-reduced-motion:reduce){.count.bump{animation:none}}
 </style>
 <style>
 .totals{position:absolute;left:max(16px,env(safe-area-inset-left));right:max(16px,env(safe-area-inset-right));bottom:44px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;pointer-events:none}
-.totals span{padding:4px 10px;border-radius:99px;background:#000a;font:600 13px var(--body);font-variant-numeric:tabular-nums}
-.totals span.on{background:var(--accent);color:#000}
+.totals span{padding:4px 10px;border-radius:99px;background:#0B1526cc;font:600 13px var(--body);font-variant-numeric:tabular-nums}
+.totals span.on{background:var(--accent);color:var(--ink)}
 .totals span.done{outline:2px solid var(--accent)}
 .clock{font:600 15px var(--body);font-variant-numeric:tabular-nums;color:var(--fg)}
+.wodinfo{position:absolute;left:max(16px,env(safe-area-inset-left));right:max(16px,env(safe-area-inset-right));bottom:76px;text-align:center;font-size:13px;color:var(--fg);text-shadow:0 1px 4px #000;pointer-events:none}
+.wodinfo b{color:var(--accent)}
+select{font:600 14px var(--body);padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--fg);max-width:100%}
+select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -59,6 +63,7 @@ input[type=file]{position:absolute;opacity:0;width:1px;height:1px}
       <div class="meta"><b id="exName">Auto</b><span class="clock" id="clock">0:00</span><br><span id="angle">angle —</span><br><span class="phase" id="phase">ready</span></div>
     </div>
     <div class="totals" id="totals"></div>
+    <div class="wodinfo" id="wodinfo"></div>
     <div class="msg" id="msg">Loading pose model…</div>
   </div>
   <div class="bar">
@@ -70,7 +75,7 @@ input[type=file]{position:absolute;opacity:0;width:1px;height:1px}
       <button id="ex-situp" data-ex="situp" aria-pressed="false">Sit-up</button>
     </div>
     <button id="cam" class="primary" disabled>Start camera</button>
-    <button id="murph" aria-pressed="false">Murph</button>
+    <select id="wod" aria-label="Workout"></select>
     <label class="btn">Use a video<input id="file" type="file" accept="video/*"></label>
     <button id="reset">Reset</button>
     <button id="voice" aria-pressed="true">Voice on</button>
@@ -88,11 +93,25 @@ import { PoseLandmarker, FilesetResolver, DrawingUtils } from "https://cdn.jsdel
 // down/up are the joint angles (degrees) that mark the bottom and top of a rep.
 // ponytail: fixed thresholds per exercise; tune here (or add per-user calibration) if real people miss reps.
 const EXERCISES = {
-  pullup: { name: "Pull-ups", short: "Pull",  joints: [[11,13,15],[12,14,16]], down: 80,  up: 145, murph: 100 },
-  pushup: { name: "Push-ups", short: "Push",  joints: [[11,13,15],[12,14,16]], down: 100, up: 150, murph: 200 },
-  squat:  { name: "Squats",   short: "Squat", joints: [[23,25,27],[24,26,28]], down: 110, up: 160, murph: 300 },
+  pullup: { name: "Pull-ups", short: "Pull",  joints: [[11,13,15],[12,14,16]], down: 80,  up: 145 },
+  pushup: { name: "Push-ups", short: "Push",  joints: [[11,13,15],[12,14,16]], down: 100, up: 150 },
+  squat:  { name: "Squats",   short: "Squat", joints: [[23,25,27],[24,26,28]], down: 110, up: 160 },
   situp:  { name: "Sit-ups",  short: "Sit-up", joints: [[11,23,25],[12,24,26]], down: 75,  up: 115 },
 };
+
+// Benchmark workouts that use only movements the camera can count (no barbells, burpees or box jumps).
+// goals = total reps for time; round = reps per round (rounds = how many, cap = minutes on the clock, emom = call out each minute).
+const WORKOUTS = {
+  free:      { name: "Free workout" },
+  murph:     { name: "Murph",      info: "1 mi run · 100 pull · 200 push · 300 squat · 1 mi run, for time", goals: { pullup: 100, pushup: 200, squat: 300 } },
+  halfmurph: { name: "Half Murph", info: "½ mi run · 50 pull · 100 push · 150 squat · ½ mi run, for time",  goals: { pullup: 50, pushup: 100, squat: 150 } },
+  angie:     { name: "Angie",      info: "100 pull · 100 push · 100 sit-up · 100 squat, for time", goals: { pullup: 100, pushup: 100, situp: 100, squat: 100 } },
+  barbara:   { name: "Barbara",    info: "5 rounds: 20 pull · 30 push · 40 sit-up · 50 squat, 3 min rest between", round: { pullup: 20, pushup: 30, situp: 40, squat: 50 }, rounds: 5 },
+  cindy:     { name: "Cindy",      info: "20 min, as many rounds as possible: 5 pull · 10 push · 15 squat", round: { pullup: 5, pushup: 10, squat: 15 }, cap: 20 },
+  chelsea:   { name: "Chelsea",    info: "Every minute for 30 min: 5 pull · 10 push · 15 squat", round: { pullup: 5, pushup: 10, squat: 15 }, cap: 30, emom: true },
+};
+const goalsOf = w => w.goals || (w.round && w.rounds ? Object.fromEntries(Object.entries(w.round).map(([k, n]) => [k, n * w.rounds])) : null);
+const roundsDone = (w, reps) => w.round ? Math.min(...Object.keys(w.round).map(k => Math.floor(reps[k] / w.round[k]))) : null;
 
 // Pure rep counter: feed angles, it counts one rep per full down→up cycle (angle drops below `down`, then rises above `up`).
 function makeCounter(cfg) {
@@ -152,15 +171,17 @@ if (location.search.includes("test")) {
   const plank = { 0: P(.15,.6), 11: P(.2,.6), 12: P(.2,.6), 15: P(.2,.8), 16: P(.2,.8), 23: P(.5,.62), 24: P(.5,.62), 25: P(.68,.64), 26: P(.68,.64), 27: P(.85,.66), 28: P(.85,.66) };
   const situp = { 0: P(.15,.7), 11: P(.2,.72), 12: P(.2,.72), 15: P(.3,.7), 16: P(.3,.7), 23: P(.45,.8), 24: P(.45,.8), 25: P(.6,.6), 26: P(.6,.6), 27: P(.75,.8), 28: P(.75,.8) };
   const got = [stand, hang, plank, situp].map(o => classify(body(o)));
-  const ok = c.reps === 3 && got.join() === "squat,pullup,pushup,situp";
+  const cindyRounds = roundsDone(WORKOUTS.cindy, { pullup: 11, pushup: 20, squat: 29 });  // 2 full rounds
+  const barbaraGoal = goalsOf(WORKOUTS.barbara).squat;                                     // 5 × 50
+  const ok = c.reps === 3 && got.join() === "squat,pullup,pushup,situp" && cindyRounds === 2 && barbaraGoal === 250;
   console.log("self-check:", ok ? "PASS" : "FAIL", { reps: c.reps, got });
   window.__selftest = ok ? "PASS" : "FAIL";
 }
 
 const $ = id => document.getElementById(id);
 const video = $("video"), canvas = $("canvas"), ctx = canvas.getContext("2d");
-let mode = "auto", current = "pushup", landmarker, running = false, voice = true, murph = false;
-let counters, smooth = null, guess = null, guessFrames = 0, startedAt = null;
+let mode = "auto", current = "pushup", landmarker, running = false, voice = true, wod = WORKOUTS.free;
+let counters, smooth = null, guess = null, guessFrames = 0, startedAt = null, finished = false, lastMinute = 0;
 const SWITCH_FRAMES = 20; // a new position must hold ~2/3 s before auto mode switches exercise
 
 function say(text) {
@@ -169,18 +190,24 @@ function say(text) {
   speechSynthesis.speak(new SpeechSynthesisUtterance(String(text)));
 }
 
+const repsMap = () => Object.fromEntries(Object.keys(EXERCISES).map(k => [k, counters[k].reps]));
+const wodKeys = () => Object.keys(goalsOf(wod) || wod.round || EXERCISES);
+const fmt = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
 function renderTotals() {
-  const keys = murph ? ["pullup", "pushup", "squat"] : Object.keys(EXERCISES);
-  $("totals").innerHTML = keys.map(k => {
-    const e = EXERCISES[k], n = counters[k].reps, goal = murph ? e.murph : null;
+  const goals = goalsOf(wod);
+  $("totals").innerHTML = wodKeys().map(k => {
+    const n = counters[k].reps, goal = goals?.[k];
     const cls = (k === current ? "on" : "") + (goal && n >= goal ? " done" : "");
-    return `<span class="${cls}">${e.short} ${n}${goal ? "/" + goal : ""}</span>`;
+    return `<span class="${cls}">${EXERCISES[k].short} ${n}${goal ? "/" + goal : ""}</span>`;
   }).join("");
+  const r = roundsDone(wod, repsMap());
+  const roundText = r == null ? "" : wod.rounds ? ` · <b>Round ${Math.min(r + 1, wod.rounds)} of ${wod.rounds}</b>` : ` · <b>${r} rounds</b>`;
+  $("wodinfo").innerHTML = wod.info ? `${wod.name}: ${wod.info}${roundText}` : "";
 }
 
 function render(phase, angle) {
-  const reps = counters[current].reps;
-  $("count").textContent = reps;
+  $("count").textContent = counters[current].reps;
   $("exName").textContent = (mode === "auto" ? "Auto · " : "") + EXERCISES[current].name;
   $("phase").textContent = phase === "down" ? "down" : "up";
   $("phase").className = "phase" + (phase === "down" ? " down" : "");
@@ -190,7 +217,9 @@ function render(phase, angle) {
 
 function resetAll() {
   counters = Object.fromEntries(Object.keys(EXERCISES).map(k => [k, makeCounter(EXERCISES[k])]));
-  smooth = null; guess = null; guessFrames = 0; startedAt = running ? performance.now() : null;
+  smooth = null; guess = null; guessFrames = 0; finished = false; lastMinute = 0;
+  startedAt = running ? performance.now() : null;
+  $("clock").textContent = wod.cap ? fmt(wod.cap * 60) : "0:00";
   render("up", null);
 }
 
@@ -207,16 +236,35 @@ function setMode(m) {
   render("up", null);
 }
 
+$("wod").innerHTML = Object.entries(WORKOUTS).map(([k, w]) => `<option value="${k}">${w.name}</option>`).join("");
+$("wod").onchange = e => { wod = WORKOUTS[e.target.value]; resetAll(); };
 document.querySelectorAll("[data-ex]").forEach(b => b.onclick = () => setMode(b.dataset.ex));
 $("reset").onclick = resetAll;
-$("murph").onclick = e => { murph = !murph; e.target.setAttribute("aria-pressed", murph); renderTotals(); };
 $("voice").onclick = e => { voice = !voice; e.target.setAttribute("aria-pressed", voice); e.target.textContent = voice ? "Voice on" : "Voice off"; };
 
+// Clock: counts up, or down from the time cap. Time's up or all reps done = workout over, counting stops.
 setInterval(() => {
-  if (startedAt == null) return;
+  if (startedAt == null || finished) return;
   const s = Math.floor((performance.now() - startedAt) / 1000);
-  $("clock").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  if (wod.cap) {
+    const left = Math.max(0, wod.cap * 60 - s);
+    $("clock").textContent = fmt(left);
+    const m = Math.floor(s / 60);
+    if (wod.emom && m > lastMinute && left > 0) { lastMinute = m; say(`Minute ${m + 1}. Go`); }
+    if (left === 0) { finished = true; const r = roundsDone(wod, repsMap()); say(`Time! ${r} rounds`); }
+  } else {
+    $("clock").textContent = fmt(s);
+  }
 }, 500);
+
+function checkDone() {
+  const goals = goalsOf(wod);
+  if (!goals || finished) return;
+  if (Object.entries(goals).every(([k, n]) => counters[k].reps >= n)) {
+    finished = true;
+    say(`${wod.name} done! ${$("clock").textContent.replace(":", " minutes ")} seconds`);
+  }
+}
 
 function loop() {
   if (!running) return;
@@ -227,25 +275,27 @@ function loop() {
     const lm = res.landmarks?.[0];
     if (lm) {
       const draw = new DrawingUtils(ctx);
-      draw.drawConnectors(lm, PoseLandmarker.POSE_CONNECTIONS, { color: "#c8ff3d", lineWidth: 4 });
-      draw.drawLandmarks(lm, { color: "#f2f4ee", radius: 3 });
+      draw.drawConnectors(lm, PoseLandmarker.POSE_CONNECTIONS, { color: "#8EC1F2", lineWidth: 4 });
+      draw.drawLandmarks(lm, { color: "#D6DCE4", radius: 3 });
 
       if (mode === "auto") {
         const g = classify(lm, video.videoWidth / video.videoHeight);
         guessFrames = g === guess ? guessFrames + 1 : 1; guess = g;
-        if (guessFrames >= SWITCH_FRAMES) switchTo(g);
+        // only switch to movements that are in the chosen workout
+        if (guessFrames >= SWITCH_FRAMES && wodKeys().includes(g)) switchTo(g);
       }
 
       const raw = bestAngle(lm, EXERCISES[current].joints);
       // light smoothing so jitter at the threshold doesn't double-count
       smooth = raw == null ? smooth : smooth == null ? raw : smooth * 0.6 + raw * 0.4;
       const before = counters[current].reps;
-      const { phase } = counters[current].step(raw == null ? null : smooth);
+      const { phase } = finished ? { phase: "up" } : counters[current].step(raw == null ? null : smooth);
       const after = counters[current].reps;
       if (after !== before) {
-        const goal = murph && EXERCISES[current].murph;
+        const goal = goalsOf(wod)?.[current];
         say(goal && after === goal ? `${after}. ${EXERCISES[current].name} done!` : after);
         const el = $("count"); el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump");
+        checkDone();
       }
       render(phase, smooth);
       $("msg").textContent = "";
@@ -258,7 +308,7 @@ function loop() {
 
 function start(mirror) {
   video.classList.toggle("mirror", mirror); canvas.classList.toggle("mirror", mirror);
-  if (!running) { running = true; startedAt = performance.now(); requestAnimationFrame(loop); }
+  if (!running) { running = true; resetAll(); requestAnimationFrame(loop); }
 }
 
 $("cam").onclick = async () => {
