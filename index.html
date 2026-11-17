@@ -187,7 +187,7 @@ $("cam").onclick = async () => {
     video.srcObject = stream; await video.play(); start(true);
     $("msg").textContent = "Prop the phone up, step back, start moving";
   } catch (err) {
-    $("msg").textContent = "Camera blocked. Allow camera access, or tap Use a video.";
+    $("msg").textContent = `Camera didn't start (${err?.name || err}). In Safari: aA menu → Website Settings → Camera → Allow.`;
   }
 };
 
@@ -199,18 +199,21 @@ $("file").onchange = async e => {
 
 try {
   const fileset = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
-  landmarker = await PoseLandmarker.createFromOptions(fileset, {
+  const opts = delegate => ({
     baseOptions: {
       modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
-      delegate: "GPU",
+      delegate,
     },
     runningMode: "VIDEO", numPoses: 1,
   });
+  // GPU fails on some iPhones; fall back to CPU
+  try { landmarker = await PoseLandmarker.createFromOptions(fileset, opts("GPU")); }
+  catch { landmarker = await PoseLandmarker.createFromOptions(fileset, opts("CPU")); }
   $("cam").disabled = false;
   $("msg").textContent = "Pick an exercise, then Start camera";
   window.__ready = true;
 } catch (err) {
-  $("msg").textContent = "Couldn't load the pose model. Check your connection and reload.";
+  $("msg").textContent = "Couldn't load the pose model: " + (err?.message || err);
   console.error(err);
 }
 </script>
