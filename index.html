@@ -41,6 +41,13 @@ button:focus-visible,label.btn:focus-within{outline:2px solid var(--accent);outl
 input[type=file]{position:absolute;opacity:0;width:1px;height:1px}
 @media (prefers-reduced-motion:reduce){.count.bump{animation:none}}
 </style>
+<style>
+.totals{position:absolute;left:max(16px,env(safe-area-inset-left));right:max(16px,env(safe-area-inset-right));bottom:44px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;pointer-events:none}
+.totals span{padding:4px 10px;border-radius:99px;background:#000a;font:600 13px var(--body);font-variant-numeric:tabular-nums}
+.totals span.on{background:var(--accent);color:#000}
+.totals span.done{outline:2px solid var(--accent)}
+.clock{font:600 15px var(--body);font-variant-numeric:tabular-nums;color:var(--fg)}
+</style>
 </head>
 <body>
 <main>
@@ -49,17 +56,21 @@ input[type=file]{position:absolute;opacity:0;width:1px;height:1px}
     <canvas id="canvas"></canvas>
     <div class="hud">
       <div class="count" id="count" aria-live="polite">0</div>
-      <div class="meta"><b id="exName">Push-ups</b><span id="angle">angle —</span><br><span class="phase" id="phase">ready</span></div>
+      <div class="meta"><b id="exName">Auto</b><span class="clock" id="clock">0:00</span><br><span id="angle">angle —</span><br><span class="phase" id="phase">ready</span></div>
     </div>
+    <div class="totals" id="totals"></div>
     <div class="msg" id="msg">Loading pose model…</div>
   </div>
   <div class="bar">
     <div class="seg" role="group" aria-label="Exercise">
-      <button id="ex-pushup" data-ex="pushup" aria-pressed="true">Push-up</button>
-      <button id="ex-pullup" data-ex="pullup" aria-pressed="false">Pull-up</button>
+      <button id="ex-auto" data-ex="auto" aria-pressed="true">Auto</button>
+      <button id="ex-pushup" data-ex="pushup" aria-pressed="false">Push</button>
+      <button id="ex-pullup" data-ex="pullup" aria-pressed="false">Pull</button>
       <button id="ex-squat" data-ex="squat" aria-pressed="false">Squat</button>
+      <button id="ex-situp" data-ex="situp" aria-pressed="false">Sit-up</button>
     </div>
     <button id="cam" class="primary" disabled>Start camera</button>
+    <button id="murph" aria-pressed="false">Murph</button>
     <label class="btn">Use a video<input id="file" type="file" accept="video/*"></label>
     <button id="reset">Reset</button>
     <button id="voice" aria-pressed="true">Voice on</button>
@@ -73,18 +84,18 @@ setTimeout(() => { if (!window.__ready) document.getElementById("msg").textConte
 <script type="module">
 import { PoseLandmarker, FilesetResolver, DrawingUtils } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
 
-// Landmark ids (MediaPipe 33-point body): shoulder 11/12, elbow 13/14, wrist 15/16, hip 23/24, knee 25/26, ankle 27/28.
+// Landmark ids (MediaPipe 33-point body): nose 0, shoulder 11/12, elbow 13/14, wrist 15/16, hip 23/24, knee 25/26, ankle 27/28.
 // down/up are the joint angles (degrees) that mark the bottom and top of a rep.
 // ponytail: fixed thresholds per exercise; tune here (or add per-user calibration) if real people miss reps.
 const EXERCISES = {
-  pushup: { name: "Push-ups", joints: [[11,13,15],[12,14,16]], down: 100, up: 150 },
-  pullup: { name: "Pull-ups", joints: [[11,13,15],[12,14,16]], down: 80,  up: 145, invert: true },
-  squat:  { name: "Squats",   joints: [[23,25,27],[24,26,28]], down: 110, up: 160 },
+  pullup: { name: "Pull-ups", short: "Pull",  joints: [[11,13,15],[12,14,16]], down: 80,  up: 145, murph: 100 },
+  pushup: { name: "Push-ups", short: "Push",  joints: [[11,13,15],[12,14,16]], down: 100, up: 150, murph: 200 },
+  squat:  { name: "Squats",   short: "Squat", joints: [[23,25,27],[24,26,28]], down: 110, up: 160, murph: 300 },
+  situp:  { name: "Sit-ups",  short: "Sit-up", joints: [[11,23,25],[12,24,26]], down: 75,  up: 115 },
 };
 
-// Pure rep counter: feed angles, it counts one rep per full down→up cycle.
-// For pull-ups "down" in the angle sense is the top of the pull (arms bent), same logic.
-export function makeCounter(cfg) {
+// Pure rep counter: feed angles, it counts one rep per full down→up cycle (angle drops below `down`, then rises above `up`).
+function makeCounter(cfg) {
   let phase = "up", reps = 0;
   return {
     step(angle) {
@@ -93,13 +104,13 @@ export function makeCounter(cfg) {
       else if (phase === "down" && angle > cfg.up) { phase = "up"; reps++; }
       return { reps, phase };
     },
-    reset() { phase = "up"; reps = 0; },
+    get reps() { return reps; },
   };
 }
 
 function angleAt(a, b, c) {
   const r = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
-  let d = Math.abs(r * 180 / Math.PI);
+  const d = Math.abs(r * 180 / Math.PI);
   return d > 180 ? 360 - d : d;
 }
 
@@ -113,48 +124,99 @@ function bestAngle(lm, joints) {
   return best;
 }
 
-// Self-check: a synthetic 3-rep angle trace must count exactly 3. Run with ?test in the URL.
+// Guess the exercise from body position:
+//  legs lying flat (hip and ankle at about the same height) → floor work: straight knees = push-up, bent knees = sit-up
+//  upright → hands above shoulders = pull-up, otherwise squat
+// ponytail: simple geometry rules; a trained classifier would handle odd camera angles better.
+function classify(lm, aspect = 1) {
+  const mid = (i, j) => ({ x: (lm[i].x + lm[j].x) / 2, y: (lm[i].y + lm[j].y) / 2 });
+  const hip = mid(23, 24), ankle = mid(27, 28), wrist = mid(15, 16), shoulder = mid(11, 12);
+  const dx = Math.abs(ankle.x - hip.x) * aspect, dy = Math.abs(ankle.y - hip.y);
+  if (dx > dy * 1.5) {
+    const knee = Math.max(angleAt(lm[23], lm[25], lm[27]), angleAt(lm[24], lm[26], lm[28]));
+    return knee > 140 ? "pushup" : "situp";
+  }
+  // hands clearly above shoulders = hanging from a bar (holds even with chin over the bar)
+  return wrist.y < shoulder.y - 0.03 ? "pullup" : "squat";
+}
+
+// Self-check: run with ?test in the URL.
 if (location.search.includes("test")) {
   const c = makeCounter(EXERCISES.pushup);
-  const trace = [170,160,120,95,90,110,155,165, 170,98,92,151, 160,140,99,120,149,152, 130,105];
-  let r; for (const a of trace) r = c.step(a);
-  console.assert(r.reps === 3, "expected 3 reps, got " + r.reps);
-  console.log("rep counter self-check:", r.reps === 3 ? "PASS" : "FAIL", r);
-  window.__selftest = r.reps === 3 ? "PASS" : "FAIL";
+  for (const a of [170,160,120,95,90,110,155,165, 170,98,92,151, 160,140,99,120,149,152, 130,105]) c.step(a);
+  const P = (x, y) => ({ x, y, visibility: 1 });
+  const body = o => { const lm = Array.from({ length: 33 }, () => P(0.5, 0.5)); for (const k in o) lm[k] = o[k]; return lm; };
+  // standing, arms down → squat; arms overhead → pull-up; plank → push-up; lying, knees bent → sit-up
+  const stand = { 0: P(.5,.1), 11: P(.45,.2), 12: P(.55,.2), 15: P(.45,.5), 16: P(.55,.5), 23: P(.47,.5), 24: P(.53,.5), 25: P(.47,.7), 26: P(.53,.7), 27: P(.47,.9), 28: P(.53,.9) };
+  const hang  = { ...stand, 15: P(.45,.02), 16: P(.55,.02) };
+  const plank = { 0: P(.15,.6), 11: P(.2,.6), 12: P(.2,.6), 15: P(.2,.8), 16: P(.2,.8), 23: P(.5,.62), 24: P(.5,.62), 25: P(.68,.64), 26: P(.68,.64), 27: P(.85,.66), 28: P(.85,.66) };
+  const situp = { 0: P(.15,.7), 11: P(.2,.72), 12: P(.2,.72), 15: P(.3,.7), 16: P(.3,.7), 23: P(.45,.8), 24: P(.45,.8), 25: P(.6,.6), 26: P(.6,.6), 27: P(.75,.8), 28: P(.75,.8) };
+  const got = [stand, hang, plank, situp].map(o => classify(body(o)));
+  const ok = c.reps === 3 && got.join() === "squat,pullup,pushup,situp";
+  console.log("self-check:", ok ? "PASS" : "FAIL", { reps: c.reps, got });
+  window.__selftest = ok ? "PASS" : "FAIL";
 }
 
 const $ = id => document.getElementById(id);
 const video = $("video"), canvas = $("canvas"), ctx = canvas.getContext("2d");
-let exKey = "pushup", counter = makeCounter(EXERCISES[exKey]), landmarker, running = false;
-let voice = true, smooth = null, lastReps = 0;
+let mode = "auto", current = "pushup", landmarker, running = false, voice = true, murph = false;
+let counters, smooth = null, guess = null, guessFrames = 0, startedAt = null;
+const SWITCH_FRAMES = 20; // a new position must hold ~2/3 s before auto mode switches exercise
 
-function say(n) {
+function say(text) {
   if (!voice || !("speechSynthesis" in window)) return;
   speechSynthesis.cancel();
-  speechSynthesis.speak(new SpeechSynthesisUtterance(String(n)));
+  speechSynthesis.speak(new SpeechSynthesisUtterance(String(text)));
 }
 
-function render({ reps, phase }, angle) {
+function renderTotals() {
+  const keys = murph ? ["pullup", "pushup", "squat"] : Object.keys(EXERCISES);
+  $("totals").innerHTML = keys.map(k => {
+    const e = EXERCISES[k], n = counters[k].reps, goal = murph ? e.murph : null;
+    const cls = (k === current ? "on" : "") + (goal && n >= goal ? " done" : "");
+    return `<span class="${cls}">${e.short} ${n}${goal ? "/" + goal : ""}</span>`;
+  }).join("");
+}
+
+function render(phase, angle) {
+  const reps = counters[current].reps;
   $("count").textContent = reps;
+  $("exName").textContent = (mode === "auto" ? "Auto · " : "") + EXERCISES[current].name;
   $("phase").textContent = phase === "down" ? "down" : "up";
   $("phase").className = "phase" + (phase === "down" ? " down" : "");
   $("angle").textContent = angle == null ? "angle —" : `angle ${Math.round(angle)}°`;
-  if (reps !== lastReps) {
-    lastReps = reps; say(reps);
-    const el = $("count"); el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump");
-  }
+  renderTotals();
 }
 
-function setExercise(key) {
-  exKey = key; counter = makeCounter(EXERCISES[key]); smooth = null; lastReps = 0;
-  $("exName").textContent = EXERCISES[key].name;
-  document.querySelectorAll("[data-ex]").forEach(b => b.setAttribute("aria-pressed", b.dataset.ex === key));
-  render({ reps: 0, phase: "up" }, null);
+function resetAll() {
+  counters = Object.fromEntries(Object.keys(EXERCISES).map(k => [k, makeCounter(EXERCISES[k])]));
+  smooth = null; guess = null; guessFrames = 0; startedAt = running ? performance.now() : null;
+  render("up", null);
 }
 
-document.querySelectorAll("[data-ex]").forEach(b => b.onclick = () => setExercise(b.dataset.ex));
-$("reset").onclick = () => setExercise(exKey);
+function switchTo(key) {
+  if (key === current) return;
+  current = key; smooth = null;
+  say(EXERCISES[key].name);
+}
+
+function setMode(m) {
+  mode = m;
+  if (m !== "auto") switchTo(m);
+  document.querySelectorAll("[data-ex]").forEach(b => b.setAttribute("aria-pressed", b.dataset.ex === m));
+  render("up", null);
+}
+
+document.querySelectorAll("[data-ex]").forEach(b => b.onclick = () => setMode(b.dataset.ex));
+$("reset").onclick = resetAll;
+$("murph").onclick = e => { murph = !murph; e.target.setAttribute("aria-pressed", murph); renderTotals(); };
 $("voice").onclick = e => { voice = !voice; e.target.setAttribute("aria-pressed", voice); e.target.textContent = voice ? "Voice on" : "Voice off"; };
+
+setInterval(() => {
+  if (startedAt == null) return;
+  const s = Math.floor((performance.now() - startedAt) / 1000);
+  $("clock").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}, 500);
 
 function loop() {
   if (!running) return;
@@ -167,10 +229,25 @@ function loop() {
       const draw = new DrawingUtils(ctx);
       draw.drawConnectors(lm, PoseLandmarker.POSE_CONNECTIONS, { color: "#c8ff3d", lineWidth: 4 });
       draw.drawLandmarks(lm, { color: "#f2f4ee", radius: 3 });
-      const raw = bestAngle(lm, EXERCISES[exKey].joints);
+
+      if (mode === "auto") {
+        const g = classify(lm, video.videoWidth / video.videoHeight);
+        guessFrames = g === guess ? guessFrames + 1 : 1; guess = g;
+        if (guessFrames >= SWITCH_FRAMES) switchTo(g);
+      }
+
+      const raw = bestAngle(lm, EXERCISES[current].joints);
       // light smoothing so jitter at the threshold doesn't double-count
       smooth = raw == null ? smooth : smooth == null ? raw : smooth * 0.6 + raw * 0.4;
-      render(counter.step(raw == null ? null : smooth), smooth);
+      const before = counters[current].reps;
+      const { phase } = counters[current].step(raw == null ? null : smooth);
+      const after = counters[current].reps;
+      if (after !== before) {
+        const goal = murph && EXERCISES[current].murph;
+        say(goal && after === goal ? `${after}. ${EXERCISES[current].name} done!` : after);
+        const el = $("count"); el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump");
+      }
+      render(phase, smooth);
       $("msg").textContent = "";
     } else {
       $("msg").textContent = "Step back so your whole body is in frame";
@@ -181,8 +258,7 @@ function loop() {
 
 function start(mirror) {
   video.classList.toggle("mirror", mirror); canvas.classList.toggle("mirror", mirror);
-  setExercise(exKey);
-  if (!running) { running = true; requestAnimationFrame(loop); }
+  if (!running) { running = true; startedAt = performance.now(); requestAnimationFrame(loop); }
 }
 
 $("cam").onclick = async () => {
@@ -201,6 +277,8 @@ $("file").onchange = async e => {
   video.src = URL.createObjectURL(f); video.loop = false; await video.play(); start(false);
 };
 
+resetAll();
+
 try {
   const fileset = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
   const opts = delegate => ({
@@ -214,7 +292,7 @@ try {
   try { landmarker = await PoseLandmarker.createFromOptions(fileset, opts("GPU")); }
   catch { landmarker = await PoseLandmarker.createFromOptions(fileset, opts("CPU")); }
   $("cam").disabled = false;
-  $("msg").textContent = "Pick an exercise, then Start camera";
+  $("msg").textContent = "Leave it on Auto, tap Start camera, and go";
   window.__ready = true;
 } catch (err) {
   $("msg").textContent = "Couldn't load the pose model: " + (err?.message || err);
