@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Rep Counter</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;600&display=swap" media="print" onload="this.media='all'">
 <style>
 /* Layout: full-screen camera, giant rep number overlaid, controls docked at bottom. Single dark gym look. */
 :root{
@@ -66,6 +66,10 @@ input[type=file]{position:absolute;opacity:0;width:1px;height:1px}
   </div>
 </main>
 
+<script>
+// If the tracker never finishes loading (old iOS, blocked download), say so instead of hanging.
+setTimeout(() => { if (!window.__ready) document.getElementById("msg").textContent = "Still loading the tracker. On a weak signal try Wi-Fi; if it never loads, update iOS (needs 16.4+)."; }, 25000);
+</script>
 <script type="module">
 import { PoseLandmarker, FilesetResolver, DrawingUtils } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
 
