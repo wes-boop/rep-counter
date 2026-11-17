@@ -4,53 +4,87 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0B1526">
 <title>Rep Counter</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Audiowide&family=Inter:wght@400;600&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
 <style>
-/* Layout: full-screen camera, giant rep number overlaid, controls docked at bottom. Single dark gym look. */
+/* Layout: full-bleed camera; frosted header + activity rings over it; frosted bottom sheet with controls.
+   Palette: HutCrew blue horizon (midnight navy, sky, electric blue, silver). Type: Apple system font, rounded numerals. */
 :root{
-  --bg:#0B1526; --panel:#0F1B2D; --fg:#D6DCE4; --muted:#A9B4C2; --line:#1F3556; --ink:#0B1526;
-  --accent:#8EC1F2; --down:#3B82D6;
-  --display:Audiowide,"Arial Black",system-ui,sans-serif;
-  --body:Inter,system-ui,-apple-system,sans-serif;
+  --bg:#0B1526; --deep:#060D19;
+  --glass:rgba(15,27,45,.62); --glass-strong:rgba(15,27,45,.82);
+  --hair:rgba(214,220,228,.14); --fill:rgba(214,220,228,.10);
+  --fg:#F2F5F9; --fg2:#A9B4C2;
+  --sky:#8EC1F2; --blue:#3B82D6; --navy:#1F3556; --ink:#0B1526;
+  --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,sans-serif;
+  --rounded:ui-rounded,"SF Pro Rounded",-apple-system,Inter,system-ui,sans-serif;
   color-scheme:dark;
 }
-*{box-sizing:border-box}
-html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--body)}
-main{position:relative;height:100%;display:grid;grid-template-rows:1fr auto}
-.stage{position:relative;overflow:hidden;background:var(--ink)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+main{height:100%;display:grid;grid-template-rows:1fr auto}
+
+/* camera stage */
+.stage{position:relative;overflow:hidden;background:radial-gradient(120% 80% at 50% 0%,#14284A 0%,var(--bg) 55%,var(--deep) 100%)}
 video,canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
 video.mirror,canvas.mirror{transform:scaleX(-1)}
-.hud{position:absolute;top:max(12px,env(safe-area-inset-top));left:max(16px,env(safe-area-inset-left));right:max(16px,env(safe-area-inset-right));display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
-.count{font-family:var(--display);font-size:clamp(88px,22vw,180px);line-height:.9;color:var(--accent);text-shadow:0 4px 24px #000a;font-variant-numeric:tabular-nums}
-.count.bump{animation:bump .25s}
-@keyframes bump{50%{transform:scale(1.15)}}
-.meta{text-align:right;font-size:13px;color:var(--muted);text-shadow:0 1px 4px #000}
-.meta b{display:block;font-family:var(--display);font-size:20px;color:var(--fg);letter-spacing:.04em;text-transform:uppercase}
-.phase{display:inline-block;margin-top:6px;padding:2px 10px;border-radius:99px;background:var(--panel);font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-size:11px}
-.phase.down{background:var(--down);color:#fff}
-.msg{position:absolute;inset:auto 16px 16px;text-align:center;color:var(--muted);font-size:14px;text-shadow:0 1px 4px #000}
-.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;padding-block:12px calc(12px + env(safe-area-inset-bottom));padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right));background:var(--panel)}
-.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.seg button{border:0;border-radius:0}
-button,label.btn{font:600 14px var(--body);padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--fg);cursor:pointer}
-button[aria-pressed="true"]{background:var(--accent);color:var(--ink)}
-button.primary{background:var(--accent);color:var(--ink);border-color:var(--accent)}
-button:focus-visible,label.btn:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.glass{background:var(--glass);-webkit-backdrop-filter:blur(24px) saturate(170%);backdrop-filter:blur(24px) saturate(170%);border:1px solid var(--hair)}
+
+/* header */
+.head{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);left:max(14px,env(safe-area-inset-left));right:max(14px,env(safe-area-inset-right));display:flex;gap:10px;align-items:center;padding:10px 12px 10px 16px;border-radius:20px;pointer-events:none}
+.head .t{flex:1;min-width:0}
+.eyebrow{font:600 11px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--sky)}
+.title{font:700 20px/1.2 var(--sans);letter-spacing:-.01em}
+.sub{font:500 12.5px/1.35 var(--sans);color:var(--fg2);margin-top:2px}
+.sub b{color:var(--sky);font-weight:600}
+.clock{font:600 22px var(--rounded);font-variant-numeric:tabular-nums;padding:6px 12px;border-radius:12px;background:var(--fill)}
+
+/* rings + count */
+.rings{position:absolute;top:calc(env(safe-area-inset-top,0px) + 108px);left:max(14px,env(safe-area-inset-left));width:176px;height:176px;border-radius:50%;pointer-events:none;display:grid;place-items:center}
+.rings svg{position:absolute;inset:8px;width:calc(100% - 16px);height:calc(100% - 16px);transform:rotate(-90deg)}
+.rings circle{fill:none;stroke-linecap:round}
+.rings .track{stroke:var(--fill)}
+.rings .goal{stroke:url(#gSky);transition:stroke-dashoffset .4s ease}
+.rings .depth{stroke:var(--blue);transition:stroke-dashoffset .12s linear}
+.num{position:relative;text-align:center}
+.count{font:700 64px/1 var(--rounded);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.count.bump{animation:bump .3s cubic-bezier(.3,1.6,.5,1)}
+@keyframes bump{40%{transform:scale(1.14)}}
+.ex{font:600 11px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--fg2);margin-top:4px}
+
+/* per-movement totals + toast */
+.chips{position:absolute;left:max(14px,env(safe-area-inset-left));right:max(14px,env(safe-area-inset-right));bottom:44px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;pointer-events:none}
+.chip{position:relative;overflow:hidden;padding:7px 12px 9px;border-radius:12px;font:600 13px var(--sans);font-variant-numeric:tabular-nums;color:var(--fg)}
+.chip small{color:var(--fg2);font-weight:500}
+.chip i{position:absolute;left:0;bottom:0;height:3px;width:calc(var(--p,0)*100%);background:var(--sky);border-radius:0 2px 2px 0}
+.chip.on{border-color:var(--sky);box-shadow:0 0 0 1px var(--sky) inset}
+.chip.done i{background:#7BE0A8}
+.toast{position:absolute;left:50%;transform:translateX(-50%);bottom:96px;max-width:calc(100% - 32px);padding:9px 16px;border-radius:99px;font:500 13.5px var(--sans);text-align:center;pointer-events:none}
+.toast:empty{display:none}
+
+/* bottom sheet */
+.sheet{position:relative;z-index:2;margin-top:-26px;border-radius:26px 26px 0 0;border-bottom:0;background:var(--glass-strong);display:grid;gap:12px;padding-block:8px calc(14px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
+.grab{width:36px;height:5px;border-radius:3px;background:var(--hair);margin:0 auto 2px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:14px;background:var(--fill)}
+.row label{font:500 15px var(--sans);color:var(--fg2)}
+select{appearance:none;-webkit-appearance:none;border:0;background:transparent;color:var(--fg);font:600 16px var(--sans);text-align:right;padding-right:18px;max-width:60%;
+  background-image:linear-gradient(45deg,transparent 50%,var(--fg2) 50%),linear-gradient(135deg,var(--fg2) 50%,transparent 50%);
+  background-position:right 6px center,right 1px center;background-size:5px 5px;background-repeat:no-repeat}
+.seg{display:grid;grid-template-columns:repeat(5,1fr);padding:2px;border-radius:10px;background:var(--fill)}
+.seg button{border:0;background:transparent;color:var(--fg);font:500 13.5px var(--sans);padding:8px 0;border-radius:8px;cursor:pointer;min-width:0}
+.seg button[aria-pressed="true"]{background:#3A4A63;font-weight:600;box-shadow:0 2px 6px rgba(0,0,0,.35)}
+.primary{border:0;border-radius:14px;padding:16px;font:600 17px var(--sans);color:var(--ink);cursor:pointer;background:linear-gradient(180deg,#A6CFF6,var(--sky));box-shadow:0 8px 24px rgba(59,130,214,.35)}
+.primary:disabled{opacity:.45;box-shadow:none}
+.tools{display:flex;justify-content:space-around}
+.tool{display:grid;justify-items:center;gap:5px;border:0;background:transparent;color:var(--fg2);font:500 11.5px var(--sans);cursor:pointer}
+.tool span{display:grid;place-items:center;width:46px;height:46px;border-radius:50%;background:var(--fill);color:var(--fg)}
+.tool svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tool[aria-pressed="false"] span{color:var(--fg2)}
+button:focus-visible,select:focus-visible,.tool:focus-within span{outline:2px solid var(--sky);outline-offset:2px}
 input[type=file]{position:absolute;opacity:0;width:1px;height:1px}
-@media (prefers-reduced-motion:reduce){.count.bump{animation:none}}
-</style>
-<style>
-.totals{position:absolute;left:max(16px,env(safe-area-inset-left));right:max(16px,env(safe-area-inset-right));bottom:44px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;pointer-events:none}
-.totals span{padding:4px 10px;border-radius:99px;background:#0B1526cc;font:600 13px var(--body);font-variant-numeric:tabular-nums}
-.totals span.on{background:var(--accent);color:var(--ink)}
-.totals span.done{outline:2px solid var(--accent)}
-.clock{font:600 15px var(--body);font-variant-numeric:tabular-nums;color:var(--fg)}
-.wodinfo{position:absolute;left:max(16px,env(safe-area-inset-left));right:max(16px,env(safe-area-inset-right));bottom:76px;text-align:center;font-size:13px;color:var(--fg);text-shadow:0 1px 4px #000;pointer-events:none}
-.wodinfo b{color:var(--accent)}
-select{font:600 14px var(--body);padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--fg);max-width:100%}
-select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.count.bump{animation:none}.rings circle{transition:none}}
 </style>
 </head>
 <body>
@@ -58,15 +92,40 @@ select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   <div class="stage">
     <video id="video" playsinline muted></video>
     <canvas id="canvas"></canvas>
-    <div class="hud">
-      <div class="count" id="count" aria-live="polite">0</div>
-      <div class="meta"><b id="exName">Auto</b><span class="clock" id="clock">0:00</span><br><span id="angle">angle —</span><br><span class="phase" id="phase">ready</span></div>
+
+    <div class="head glass">
+      <div class="t">
+        <div class="eyebrow" id="modeTag">Auto-detect</div>
+        <div class="title" id="wodTitle">Free workout</div>
+        <div class="sub" id="wodinfo"></div>
+      </div>
+      <div class="clock" id="clock">0:00</div>
     </div>
-    <div class="totals" id="totals"></div>
-    <div class="wodinfo" id="wodinfo"></div>
-    <div class="msg" id="msg">Loading pose model…</div>
+
+    <div class="rings glass">
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <defs><linearGradient id="gSky" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#C9E2FA"/><stop offset="1" stop-color="#8EC1F2"/></linearGradient></defs>
+        <circle class="track" cx="50" cy="50" r="44" stroke-width="7"/>
+        <circle class="goal" id="ringGoal" cx="50" cy="50" r="44" stroke-width="7" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+        <circle class="track" cx="50" cy="50" r="35" stroke-width="5"/>
+        <circle class="depth" id="ringDepth" cx="50" cy="50" r="35" stroke-width="5" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+      </svg>
+      <div class="num">
+        <div class="count" id="count" aria-live="polite">0</div>
+        <div class="ex" id="exName">Push-ups</div>
+      </div>
+    </div>
+
+    <div class="chips" id="totals"></div>
+    <div class="toast glass" id="msg">Loading pose model…</div>
   </div>
-  <div class="bar">
+
+  <div class="sheet glass">
+    <div class="grab"></div>
+    <div class="row">
+      <label for="wod">Workout</label>
+      <select id="wod"></select>
+    </div>
     <div class="seg" role="group" aria-label="Exercise">
       <button id="ex-auto" data-ex="auto" aria-pressed="true">Auto</button>
       <button id="ex-pushup" data-ex="pushup" aria-pressed="false">Push</button>
@@ -74,11 +133,12 @@ select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <button id="ex-squat" data-ex="squat" aria-pressed="false">Squat</button>
       <button id="ex-situp" data-ex="situp" aria-pressed="false">Sit-up</button>
     </div>
-    <button id="cam" class="primary" disabled>Start camera</button>
-    <select id="wod" aria-label="Workout"></select>
-    <label class="btn">Use a video<input id="file" type="file" accept="video/*"></label>
-    <button id="reset">Reset</button>
-    <button id="voice" aria-pressed="true">Voice on</button>
+    <button id="cam" class="primary" disabled>Start Workout</button>
+    <div class="tools">
+      <label class="tool"><span><svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="3"/><path d="M16 10.5l5-3v9l-5-3"/></svg></span>Video<input id="file" type="file" accept="video/*"></label>
+      <button class="tool" id="reset"><span><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/></svg></span>Reset</button>
+      <button class="tool" id="voice" aria-pressed="true"><span><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg></span><em id="voiceLbl" style="font-style:normal">Voice</em></button>
+    </div>
   </div>
 </main>
 
@@ -171,7 +231,7 @@ if (location.search.includes("test")) {
   const plank = { 0: P(.15,.6), 11: P(.2,.6), 12: P(.2,.6), 15: P(.2,.8), 16: P(.2,.8), 23: P(.5,.62), 24: P(.5,.62), 25: P(.68,.64), 26: P(.68,.64), 27: P(.85,.66), 28: P(.85,.66) };
   const situp = { 0: P(.15,.7), 11: P(.2,.72), 12: P(.2,.72), 15: P(.3,.7), 16: P(.3,.7), 23: P(.45,.8), 24: P(.45,.8), 25: P(.6,.6), 26: P(.6,.6), 27: P(.75,.8), 28: P(.75,.8) };
   const got = [stand, hang, plank, situp].map(o => classify(body(o)));
-  const cindyRounds = roundsDone(WORKOUTS.cindy, { pullup: 11, pushup: 20, squat: 29 });  // 2 full rounds
+  const cindyRounds = roundsDone(WORKOUTS.cindy, { pullup: 11, pushup: 20, squat: 30 });  // 2 full rounds
   const barbaraGoal = goalsOf(WORKOUTS.barbara).squat;                                     // 5 × 50
   const ok = c.reps === 3 && got.join() === "squat,pullup,pushup,situp" && cindyRounds === 2 && barbaraGoal === 250;
   console.log("self-check:", ok ? "PASS" : "FAIL", { reps: c.reps, got });
@@ -199,19 +259,23 @@ function renderTotals() {
   $("totals").innerHTML = wodKeys().map(k => {
     const n = counters[k].reps, goal = goals?.[k];
     const cls = (k === current ? "on" : "") + (goal && n >= goal ? " done" : "");
-    return `<span class="${cls}">${EXERCISES[k].short} ${n}${goal ? "/" + goal : ""}</span>`;
+    return `<span class="chip glass ${cls}" style="--p:${goal ? Math.min(1, n / goal) : 0}"><i></i>${EXERCISES[k].short} ${n}${goal ? "<small>/" + goal + "</small>" : ""}</span>`;
   }).join("");
   const r = roundsDone(wod, repsMap());
   const roundText = r == null ? "" : wod.rounds ? ` · <b>Round ${Math.min(r + 1, wod.rounds)} of ${wod.rounds}</b>` : ` · <b>${r} rounds</b>`;
-  $("wodinfo").innerHTML = wod.info ? `${wod.name}: ${wod.info}${roundText}` : "";
+  $("wodTitle").textContent = wod.name;
+  $("wodinfo").innerHTML = (wod.info || "Pick a workout, or just start moving") + roundText;
 }
 
 function render(phase, angle) {
-  $("count").textContent = counters[current].reps;
-  $("exName").textContent = (mode === "auto" ? "Auto · " : "") + EXERCISES[current].name;
-  $("phase").textContent = phase === "down" ? "down" : "up";
-  $("phase").className = "phase" + (phase === "down" ? " down" : "");
-  $("angle").textContent = angle == null ? "angle —" : `angle ${Math.round(angle)}°`;
+  const e = EXERCISES[current], n = counters[current].reps, goal = goalsOf(wod)?.[current];
+  $("count").textContent = n;
+  $("exName").textContent = e.name;
+  $("modeTag").textContent = mode === "auto" ? "Auto-detect" : "Manual";
+  // outer ring = progress to this movement's goal; inner ring = how deep you are in the current rep
+  const depth = angle == null ? 0 : Math.min(1, Math.max(0, (e.up - angle) / (e.up - e.down)));
+  $("ringGoal").style.strokeDashoffset = goal ? 1 - Math.min(1, n / goal) : 1;
+  $("ringDepth").style.strokeDashoffset = 1 - depth;
   renderTotals();
 }
 
@@ -240,7 +304,7 @@ $("wod").innerHTML = Object.entries(WORKOUTS).map(([k, w]) => `<option value="${
 $("wod").onchange = e => { wod = WORKOUTS[e.target.value]; resetAll(); };
 document.querySelectorAll("[data-ex]").forEach(b => b.onclick = () => setMode(b.dataset.ex));
 $("reset").onclick = resetAll;
-$("voice").onclick = e => { voice = !voice; e.target.setAttribute("aria-pressed", voice); e.target.textContent = voice ? "Voice on" : "Voice off"; };
+$("voice").onclick = () => { voice = !voice; $("voice").setAttribute("aria-pressed", voice); $("voiceLbl").textContent = voice ? "Voice" : "Muted"; };
 
 // Clock: counts up, or down from the time cap. Time's up or all reps done = workout over, counting stops.
 setInterval(() => {
@@ -275,7 +339,7 @@ function loop() {
     const lm = res.landmarks?.[0];
     if (lm) {
       const draw = new DrawingUtils(ctx);
-      draw.drawConnectors(lm, PoseLandmarker.POSE_CONNECTIONS, { color: "#8EC1F2", lineWidth: 4 });
+      draw.drawConnectors(lm, PoseLandmarker.POSE_CONNECTIONS, { color: "rgba(142,193,242,.9)", lineWidth: 5 });
       draw.drawLandmarks(lm, { color: "#D6DCE4", radius: 3 });
 
       if (mode === "auto") {
@@ -315,7 +379,7 @@ $("cam").onclick = async () => {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: 1280, height: 720 }, audio: false });
     video.srcObject = stream; await video.play(); start(true);
-    $("msg").textContent = "Prop the phone up, step back, start moving";
+    $("msg").textContent = "Prop your phone up and step back"; $("cam").textContent = "Camera On";
   } catch (err) {
     $("msg").textContent = `Camera didn't start (${err?.name || err}). In Safari: aA menu → Website Settings → Camera → Allow.`;
   }
@@ -342,7 +406,7 @@ try {
   try { landmarker = await PoseLandmarker.createFromOptions(fileset, opts("GPU")); }
   catch { landmarker = await PoseLandmarker.createFromOptions(fileset, opts("CPU")); }
   $("cam").disabled = false;
-  $("msg").textContent = "Leave it on Auto, tap Start camera, and go";
+  $("msg").textContent = "Pick a workout, then tap Start";
   window.__ready = true;
 } catch (err) {
   $("msg").textContent = "Couldn't load the pose model: " + (err?.message || err);
