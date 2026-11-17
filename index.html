@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Rep Counter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;600&display=swap">
+<style>
+/* Layout: full-screen camera, giant rep number overlaid, controls docked at bottom. Single dark gym look. */
+:root{
+  --bg:#0d0f0c; --panel:#1a1d18; --fg:#f2f4ee; --muted:#9aa394;
+  --accent:#c8ff3d; --down:#ff7a45;
+  --display:"Archivo Black",Impact,system-ui,sans-serif;
+  --body:Inter,system-ui,-apple-system,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--body)}
+main{position:relative;height:100%;display:grid;grid-template-rows:1fr auto}
+.stage{position:relative;overflow:hidden;background:#000}
+video,canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+video.mirror,canvas.mirror{transform:scaleX(-1)}
+.hud{position:absolute;top:max(12px,env(safe-area-inset-top));left:max(16px,env(safe-area-inset-left));right:max(16px,env(safe-area-inset-right));display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
+.count{font-family:var(--display);font-size:clamp(88px,22vw,180px);line-height:.9;color:var(--accent);text-shadow:0 4px 24px #000a;font-variant-numeric:tabular-nums}
+.count.bump{animation:bump .25s}
+@keyframes bump{50%{transform:scale(1.15)}}
+.meta{text-align:right;font-size:13px;color:var(--muted);text-shadow:0 1px 4px #000}
+.meta b{display:block;font-family:var(--display);font-size:20px;color:var(--fg);letter-spacing:.04em;text-transform:uppercase}
+.phase{display:inline-block;margin-top:6px;padding:2px 10px;border-radius:99px;background:var(--panel);font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-size:11px}
+.phase.down{background:var(--down);color:#000}
+.msg{position:absolute;inset:auto 16px 16px;text-align:center;color:var(--muted);font-size:14px;text-shadow:0 1px 4px #000}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;padding-block:12px calc(12px + env(safe-area-inset-bottom));padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right));background:var(--panel)}
+.seg{display:flex;border:1px solid #333a2e;border-radius:10px;overflow:hidden}
+.seg button{border:0;border-radius:0}
+button,label.btn{font:600 14px var(--body);padding:10px 14px;border-radius:10px;border:1px solid #333a2e;background:transparent;color:var(--fg);cursor:pointer}
+button[aria-pressed="true"]{background:var(--accent);color:#000}
+button.primary{background:var(--accent);color:#000;border-color:var(--accent)}
+button:focus-visible,label.btn:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+input[type=file]{position:absolute;opacity:0;width:1px;height:1px}
+@media (prefers-reduced-motion:reduce){.count.bump{animation:none}}
+</style>
+</head>
+<body>
+<main>
+  <div class="stage">
+    <video id="video" playsinline muted></video>
+    <canvas id="canvas"></canvas>
+    <div class="hud">
+      <div class="count" id="count" aria-live="polite">0</div>
+      <div class="meta"><b id="exName">Push-ups</b><span id="angle">angle —</span><br><span class="phase" id="phase">ready</span></div>
+    </div>
+    <div class="msg" id="msg">Loading pose model…</div>
+  </div>
+  <div class="bar">
+    <div class="seg" role="group" aria-label="Exercise">
+      <button id="ex-pushup" data-ex="pushup" aria-pressed="true">Push-up</button>
+      <button id="ex-pullup" data-ex="pullup" aria-pressed="false">Pull-up</button>
+      <button id="ex-squat" data-ex="squat" aria-pressed="false">Squat</button>
+    </div>
+    <button id="cam" class="primary" disabled>Start camera</button>
+    <label class="btn">Use a video<input id="file" type="file" accept="video/*"></label>
+    <button id="reset">Reset</button>
+    <button id="voice" aria-pressed="true">Voice on</button>
+  </div>
+</main>
+
+<script type="module">
+import { PoseLandmarker, FilesetResolver, DrawingUtils } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+// Landmark ids (MediaPipe 33-point body): shoulder 11/12, elbow 13/14, wrist 15/16, hip 23/24, knee 25/26, ankle 27/28.
+// down/up are the joint angles (degrees) that mark the bottom and top of a rep.
+// ponytail: fixed thresholds per exercise; tune here (or add per-user calibration) if real people miss reps.
+const EXERCISES = {
+  pushup: { name: "Push-ups", joints: [[11,13,15],[12,14,16]], down: 100, up: 150 },
+  pullup: { name: "Pull-ups", joints: [[11,13,15],[12,14,16]], down: 80,  up: 145, invert: true },
+  squat:  { name: "Squats",   joints: [[23,25,27],[24,26,28]], down: 110, up: 160 },
+};
+
+// Pure rep counter: feed angles, it counts one rep per full down→up cycle.
+// For pull-ups "down" in the angle sense is the top of the pull (arms bent), same logic.
+export function makeCounter(cfg) {
+  let phase = "up", reps = 0;
+  return {
+    step(angle) {
+      if (angle == null) return { reps, phase };
+      if (phase === "up" && angle < cfg.down) phase = "down";
+      else if (phase === "down" && angle > cfg.up) { phase = "up"; reps++; }
+      return { reps, phase };
+    },
+    reset() { phase = "up"; reps = 0; },
+  };
+}
+
+function angleAt(a, b, c) {
+  const r = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
+  let d = Math.abs(r * 180 / Math.PI);
+  return d > 180 ? 360 - d : d;
+}
+
+// Use whichever side of the body the camera sees best.
+function bestAngle(lm, joints) {
+  let best = null, bestVis = 0.5;
+  for (const [a, b, c] of joints) {
+    const vis = Math.min(lm[a].visibility ?? 1, lm[b].visibility ?? 1, lm[c].visibility ?? 1);
+    if (vis > bestVis) { bestVis = vis; best = angleAt(lm[a], lm[b], lm[c]); }
+  }
+  return best;
+}
+
+// Self-check: a synthetic 3-rep angle trace must count exactly 3. Run with ?test in the URL.
+if (location.search.includes("test")) {
+  const c = makeCounter(EXERCISES.pushup);
+  const trace = [170,160,120,95,90,110,155,165, 170,98,92,151, 160,140,99,120,149,152, 130,105];
+  let r; for (const a of trace) r = c.step(a);
+  console.assert(r.reps === 3, "expected 3 reps, got " + r.reps);
+  console.log("rep counter self-check:", r.reps === 3 ? "PASS" : "FAIL", r);
+  window.__selftest = r.reps === 3 ? "PASS" : "FAIL";
+}
+
+const $ = id => document.getElementById(id);
+const video = $("video"), canvas = $("canvas"), ctx = canvas.getContext("2d");
+let exKey = "pushup", counter = makeCounter(EXERCISES[exKey]), landmarker, running = false;
+let voice = true, smooth = null, lastReps = 0;
+
+function say(n) {
+  if (!voice || !("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  speechSynthesis.speak(new SpeechSynthesisUtterance(String(n)));
+}
+
+function render({ reps, phase }, angle) {
+  $("count").textContent = reps;
+  $("phase").textContent = phase === "down" ? "down" : "up";
+  $("phase").className = "phase" + (phase === "down" ? " down" : "");
+  $("angle").textContent = angle == null ? "angle —" : `angle ${Math.round(angle)}°`;
+  if (reps !== lastReps) {
+    lastReps = reps; say(reps);
+    const el = $("count"); el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump");
+  }
+}
+
+function setExercise(key) {
+  exKey = key; counter = makeCounter(EXERCISES[key]); smooth = null; lastReps = 0;
+  $("exName").textContent = EXERCISES[key].name;
+  document.querySelectorAll("[data-ex]").forEach(b => b.setAttribute("aria-pressed", b.dataset.ex === key));
+  render({ reps: 0, phase: "up" }, null);
+}
+
+document.querySelectorAll("[data-ex]").forEach(b => b.onclick = () => setExercise(b.dataset.ex));
+$("reset").onclick = () => setExercise(exKey);
+$("voice").onclick = e => { voice = !voice; e.target.setAttribute("aria-pressed", voice); e.target.textContent = voice ? "Voice on" : "Voice off"; };
+
+function loop() {
+  if (!running) return;
+  if (video.readyState >= 2) {
+    if (canvas.width !== video.videoWidth) { canvas.width = video.videoWidth; canvas.height = video.videoHeight; }
+    const res = landmarker.detectForVideo(video, performance.now());
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const lm = res.landmarks?.[0];
+    if (lm) {
+      const draw = new DrawingUtils(ctx);
+      draw.drawConnectors(lm, PoseLandmarker.POSE_CONNECTIONS, { color: "#c8ff3d", lineWidth: 4 });
+      draw.drawLandmarks(lm, { color: "#f2f4ee", radius: 3 });
+      const raw = bestAngle(lm, EXERCISES[exKey].joints);
+      // light smoothing so jitter at the threshold doesn't double-count
+      smooth = raw == null ? smooth : smooth == null ? raw : smooth * 0.6 + raw * 0.4;
+      render(counter.step(raw == null ? null : smooth), smooth);
+      $("msg").textContent = "";
+    } else {
+      $("msg").textContent = "Step back so your whole body is in frame";
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+function start(mirror) {
+  video.classList.toggle("mirror", mirror); canvas.classList.toggle("mirror", mirror);
+  setExercise(exKey);
+  if (!running) { running = true; requestAnimationFrame(loop); }
+}
+
+$("cam").onclick = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: 1280, height: 720 }, audio: false });
+    video.srcObject = stream; await video.play(); start(true);
+    $("msg").textContent = "Prop the phone up, step back, start moving";
+  } catch (err) {
+    $("msg").textContent = "Camera blocked. Allow camera access, or tap Use a video.";
+  }
+};
+
+$("file").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  if (video.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
+  video.src = URL.createObjectURL(f); video.loop = false; await video.play(); start(false);
+};
+
+try {
+  const fileset = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+  landmarker = await PoseLandmarker.createFromOptions(fileset, {
+    baseOptions: {
+      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+      delegate: "GPU",
+    },
+    runningMode: "VIDEO", numPoses: 1,
+  });
+  $("cam").disabled = false;
+  $("msg").textContent = "Pick an exercise, then Start camera";
+  window.__ready = true;
+} catch (err) {
+  $("msg").textContent = "Couldn't load the pose model. Check your connection and reload.";
+  console.error(err);
+}
+</script>
+</body>
+</html>
